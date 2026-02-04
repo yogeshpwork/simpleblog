@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Minimal Blog – Cards (Public Read‑only Link)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+  :root{
+    --bg:#f6f7f8;
+    --text:#222;
+    --card:#ffffff;
+    --muted:#666;
+    --ink:#1f2937;
+    --accent:#0f766e;
+    --shadow:0 10px 30px rgba(0,0,0,.08);
+    --radius:16px;
+    --container:1200px;
+  }
+  *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--text)}
+  .container{max-width:var(--container);margin:auto;padding:32px 16px}
+  .hidden{display:none}
+
+  .panel{
+    background:var(--card);
+    padding:24px;
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    margin-bottom:24px;
+    position:relative;
+  }
+
+  input, .editor, button, .file{
+    width:100%;
+    padding:12px;
+    margin:10px 0;
+    border-radius:10px;
+    border:1px solid #ddd;
+    font-size:15px;
+    background:#fff;
+  }
+  button{background:#222;color:#fff;cursor:pointer;border:none}
+  button:hover{opacity:.92}
+
+  .bar{
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:14px;margin-bottom:12px;color:#555;
+  }
+  .bar .left{display:flex;gap:10px;align-items:center}
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    gap:18px;
+  }
+  @media (min-width:900px){ .grid{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))} }
+
+  .post-card{
+    background:var(--card);
+    border-radius:18px;
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    transition:transform .08s ease, box-shadow .2s ease;
+  }
+  .post-card:hover{transform:translateY(-2px); box-shadow:0 14px 34px rgba(0,0,0,.12)}
+
+  .cover{aspect-ratio:16/9;background:#eef2f7;overflow:hidden}
+  .cover img{width:100%;height:100%;object-fit:cover;display:block}
+
+  .post-meta{position:relative;padding:14px 16px 16px 16px}
+  .title{font-size:17px;line-height:1.35;font-weight:600;color:var(--ink);margin:0 34px 6px 0}
+  .date{font-size:12px;color:var(--muted)}
+  .icon-btn{
+    position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:50%;
+    display:inline-grid;place-items:center;font-size:15px;border:none;background:#eee;color:#444;cursor:pointer;
+  }
+  .icon-btn:hover{background:#e5e5e5}
+  .icon-danger{background:#f3e0e0;color:#b3261e}
+  .icon-danger:hover{background:#ecd5d5}
+
+  .post-view .title{font-size:28px;margin:8px 42px 8px 0}
+  .post-view .cover{border-radius:16px;margin-bottom:14px}
+  .post-content{font-size:16px;line-height:1.6;color:#1f2937}
+  .post-content img{max-width:100%;height:auto;border-radius:10px}
+  .muted{color:var(--muted);font-size:14px}
+  .back{cursor:pointer;color:var(--accent);margin-bottom:12px;display:inline-block}
+
+  .editor{
+    min-height:180px;background:#fff;border:1px solid #ddd;border-radius:12px;padding:12px;overflow:auto;
+  }
+  .editor:empty:before{
+    content:"Paste or type… You can paste screenshots/images and formatted text.";
+    color:#999;
+  }
+  .editor img{max-width:100%;height:auto;border-radius:8px}
+  .row{display:grid;gap:12px;grid-template-columns:2fr 1fr}
+  .file{padding:10px}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+  <!-- LOGIN (hidden when ?view=public) -->
+  <div id="loginBox" class="panel">
+    <h2>Admin Login</h2>
+    <input id="username" placeholder="Username">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <p id="loginError" style="color:#b3261e;margin:6px 0 0 0"></p>
+  </div>
+
+  <!-- TOP BAR (hidden when ?view=public) -->
+  <div id="topBar" class="bar hidden">
+    <div class="left">
+      <strong>My Blog</strong><span class="muted">|</span><span class="muted">Admin</span>
+    </div>
+    <div>
+      <button id="newBtn" onclick="openEditor()">New Post</button>
+      <button onclick="logout()" style="margin-left:8px;background:#444">Logout</button>
+    </div>
+  </div>
+
+  <!-- LIST (GRID) -->
+  <div id="listView" class="panel hidden">
+    <h2 style="margin:0 0 12px">Latest</h2>
+    <div id="grid" class="grid"></div>
+    <div id="emptyMsg" class="muted" style="display:none;margin-top:8px">No posts yet.</div>
+  </div>
+
+  <!-- FULL POST -->
+  <div id="postView" class="panel hidden post-view">
+    <span class="back" onclick="showList()">← Back to posts</span>
+    <div class="cover hidden" id="viewCover"><img id="viewCoverImg" alt=""></div>
+    <h1 class="title" id="viewTitle">Title</h1>
+    <!-- Delete icon only if admin and not public view -->
+    <button id="viewDel" class="icon-btn icon-danger hidden" title="Delete"
+            onclick="confirmDeleteCurrent()" style="position:absolute;right:24px;top:24px">🗑</button>
+    <div class="date" id="viewDate" style="margin-bottom:12px"></div>
+    <div id="viewContent" class="post-content"></div>
+  </div>
+
+  <!-- EDITOR (hidden when ?view=public) -->
+  <div id="editorView" class="panel hidden">
+    <h2 style="margin:0 0 8px">New Post</h2>
+    <div class="row">
+      <input id="postTitle" placeholder="Post title">
+      <input id="coverFile" class="file" type="file" accept="image/*" />
+    </div>
+    <div id="postContent" class="editor" contenteditable="true"></div>
+    <div class="muted">Tip: Paste screenshots or formatted text here. You can also drag & drop images.</div>
+    <div style="margin-top:10px;display:flex;gap:10px">
+      <button onclick="publish()">Publish</button>
+      <button onclick="showList()" style="background:#777">Cancel</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- Mode detection ---------- */
+const params = new URLSearchParams(location.search);
+const READ_ONLY = params.get('view') === 'public'; // public read-only mode
+
+/* ---------- Auth ---------- */
+const USER="admin", PASS="winterfell";
+let currentIndex=null;
+function isAdmin(){ return !READ_ONLY && localStorage.getItem('loggedIn') === '1'; }
+
+function login(){
+  if(READ_ONLY){ return; } // no login in public view
+  const u=document.getElementById('username').value.trim();
+  const p=document.getElementById('password').value.trim();
+  if(u===USER && p===PASS){
+    localStorage.setItem('loggedIn','1');
+    init();
+  }else{
+    document.getElementById('loginError').textContent="Invalid credentials";
+  }
+}
+function logout(){ localStorage.removeItem('loggedIn'); location.reload(); }
+
+/* ---------- Storage Helpers ---------- */
+function getPosts(){ return JSON.parse(localStorage.getItem('posts')||'[]'); }
+function savePosts(arr){ localStorage.setItem('posts',JSON.stringify(arr)); }
+
+/* ---------- Views ---------- */
+function init(){
+  // In read-only mode: hide login + admin UI, ignore prior login
+  document.getElementById('loginBox').classList.toggle('hidden', READ_ONLY || isAdmin());
+  document.getElementById('topBar').classList.toggle('hidden', !isAdmin());
+  showList();
+}
+
+function showList(){
+  currentIndex=null;
+  document.getElementById('editorView').classList.add('hidden');
+  document.getElementById('postView').classList.add('hidden');
+  document.getElementById('listView').classList.remove('hidden');
+  renderGrid();
+}
+
+function openPost(i){
+  const p=getPosts()[i]; if(!p) return;
+  currentIndex=i;
+  document.getElementById('listView').classList.add('hidden');
+  document.getElementById('editorView').classList.add('hidden');
+  document.getElementById('postView').classList.remove('hidden');
+
+  const hasCover=!!p.cover;
+  document.getElementById('viewCover').classList.toggle('hidden',!hasCover);
+  if(hasCover){ document.getElementById('viewCoverImg').src=p.cover; }
+  document.getElementById('viewTitle').textContent=p.title||"(untitled)";
+  document.getElementById('viewDate').textContent="📅 "+(p.date||"");
+  document.getElementById('viewContent').innerHTML=p.content||"";
+
+  // SHOW/HIDE delete icon in full view
+  document.getElementById('viewDel').classList.toggle('hidden', !isAdmin());
+}
+
+function openEditor(){
+  if(!isAdmin()){ return; }
+  document.getElementById('listView').classList.add('hidden');
+  document.getElementById('postView').classList.add('hidden');
+  document.getElementById('editorView').classList.remove('hidden');
+  document.getElementById('postTitle').value="";
+  document.getElementById('postContent').innerHTML="";
+  document.getElementById('coverFile').value="";
+}
+
+/* ---------- Grid Rendering ---------- */
+function renderGrid(){
+  const grid=document.getElementById('grid');
+  const emptyMsg=document.getElementById('emptyMsg');
+  const posts=getPosts();
+  grid.innerHTML="";
+  emptyMsg.style.display=posts.length? "none":"block";
+
+  posts.forEach((p,i)=>{
+    const coverHTML = p.cover ? `<div class="cover">${p.cover}</div>` : `<div class="cover"></div>`;
+    const card=document.createElement('div');
+    card.className='post-card';
+    card.innerHTML = `
+      ${coverHTML}
+      <div class="post-meta">
+        <h3 class="title">${escapeHtml(p.title||"(untitled)")}</h3>
+        ${isAdmin() ? `<button class="icon-btn icon-danger" title="Delete"
+           onclick="event.stopPropagation(); deletePost(${i})">🗑</button>` : ``}
+        <div class="date">📅 ${escapeHtml(p.date||"")}</div>
+      </div>
+    `;
+    card.addEventListener('click',()=>openPost(i));
+    grid.appendChild(card);
+  });
+}
+
+/* ---------- Publish ---------- */
+function publish(){
+  if(!isAdmin()){ return; }
+  const title = document.getElementById('postTitle').value.trim();
+  const contentHTML = document.getElementById('postContent').innerHTML.trim();
+  if(!title && !contentHTML){ alert("Please add a title or content."); return; }
+
+  const posts=getPosts();
+  const coverInput=document.getElementById('coverFile');
+  let coverPromise = coverInput.files && coverInput.files[0]
+    ? fileToDataURL(coverInput.files[0])
+    : Promise.resolve(extractFirstImageSrc(contentHTML)); // fallback to first <img src=...>
+
+  coverPromise.then(cover=>{
+    posts.unshift({
+      title: title || "(untitled)",
+      content: contentHTML,
+      cover: cover || "",
+      date: new Date().toLocaleDateString()
+    });
+    savePosts(posts);
+    showList();
+  });
+}
+
+/* ---------- Delete (admin-only with confirm) ---------- */
+function deletePost(idx){
+  if(!isAdmin()){ return; }
+  const posts=getPosts();
+  const post=posts[idx];
+  if(!post) return;
+  const ok = confirm(`Delete "${post.title}"?\nThis cannot be undone.`);
+  if(!ok) return;
+  posts.splice(idx,1);
+  savePosts(posts);
+  if(document.getElementById('postView').classList.contains('hidden')) renderGrid();
+  else showList();
+}
+function confirmDeleteCurrent(){
+  if(currentIndex==null) return;
+  deletePost(currentIndex);
+}
+
+/* ---------- Editor: paste images + formatting ---------- */
+const editor=document.getElementById('postContent');
+if(editor){
+  editor.addEventListener('paste', (e)=>{
+    if(!isAdmin()) return;
+    const items = e.clipboardData && e.clipboardData.items ? e.clipboardData.items : [];
+    for(const it of items){
+      if(it.type && it.type.indexOf('image')===0){
+        const file=it.getAsFile();
+        if(file){
+          e.preventDefault();
+          fileToDataURL(file).then(src=>{ insertHtmlAtCursor(`${src}`); });
+          return;
+        }
+      }
+    }
+    const html = e.clipboardData.getData('text/html');
+    if(html){
+      e.preventDefault();
+      insertHtmlAtCursor(html);
+    }
+  });
+
+  editor.addEventListener('dragover', e=>{ if(isAdmin()) e.preventDefault(); });
+  editor.addEventListener('drop', e=>{
+    if(!isAdmin()) return;
+    e.preventDefault();
+    const files = e.dataTransfer.files || [];
+    [...files].forEach(f=>{
+      if(f.type.startsWith('image/')){
+        fileToDataURL(f).then(src=>insertHtmlAtCursor(`${src}`));
+      }
+    });
+  });
+}
+
+/* ---------- Utilities ---------- */
+function fileToDataURL(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+function insertHtmlAtCursor(html){
+  document.execCommand('insertHTML', false, html);
+}
+function extractFirstImageSrc(html=""){
+  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return m ? m[1] : "";
+}
+function escapeHtml(str=""){
+  return String(str)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+/* ---------- Boot ---------- */
+init(); // Always initialize; visibility respects READ_ONLY + isAdmin()
+</script>
+</body>
+</html>
